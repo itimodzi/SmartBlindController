@@ -40,4 +40,13 @@
     <string name="vibration_off">Вібрація OFF</string>
     <string name="torch_on">Ліхтарик ON</string>
     <string name="torch_off">Ліхтарик OFF</string>
+    <string name="nav_home">Головна</string>
+    <string name="nav_bluetooth">Bluetooth</string>
+    <string name="nav_analytics">Аналітика</string>
+    <string name="analytics_title">Аналітика</string>
+    <string name="analytics_legend">Легенда: ━ кут нахилу пристрою (з акселерометра)</string>
+    <string name="analytics_axis_y">Вісь Y — кут нахилу, ° (0–90)</string>
+    <string name="analytics_axis_x">Вісь X — час запису, HH:mm:ss</string>
+    <string name="analytics_stats">Точок: %1$d з %2$d, спрацювань актуатора: %3$d</string>
+    <string name="analytics_empty">Даних поки немає — поверніть пристрій (Device pose)</string>
 </resources>

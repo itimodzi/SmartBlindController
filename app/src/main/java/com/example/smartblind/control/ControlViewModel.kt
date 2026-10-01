@@ -10,9 +10,12 @@ import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 
@@ -42,6 +45,10 @@ class ControlViewModel(application: Application) : AndroidViewModel(application)
     ) { b, last, torch, vibration -> ControlUiState(b, torch, vibration, last) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, ControlUiState())
 
+    // Подія «спрацював актуатор» (перехід стану або ручне керування): її записує Аналітика (ЛР №5).
+    private val _actuatorEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 8)
+    val actuatorEvents: SharedFlow<Unit> = _actuatorEvents.asSharedFlow()
+
     // --- Віддалене керування (Firebase) ---
     private var remoteRef: DatabaseReference? = null
     private var remoteListener: ValueEventListener? = null
@@ -60,16 +67,19 @@ class ControlViewModel(application: Application) : AndroidViewModel(application)
     fun manualVibration(on: Boolean) {
         actuator.setVibration(on, "manual control")
         lastCommand.value = LastCommand("Vibration ${if (on) "ON" else "OFF"}", CommandSource.MANUAL)
+        _actuatorEvents.tryEmit(Unit)
     }
 
     fun manualTorch(on: Boolean) {
         actuator.toggleFlashlight(on, "manual control")
         lastCommand.value = LastCommand("Torch ${if (on) "ON" else "OFF"}", CommandSource.MANUAL)
+        _actuatorEvents.tryEmit(Unit)
     }
 
     private fun publish(change: StatusChange) {
         blind.value = change.to
         lastCommand.value = LastCommand(change.to.name, change.source)
+        _actuatorEvents.tryEmit(Unit)
     }
 
     /** Підключає слухач control/blind_command (викликається з onStart). */

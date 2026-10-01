@@ -20,6 +20,18 @@ import androidx.activity.viewModels
 import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.lifecycle.lifecycleScope
+import com.example.smartblind.analytics.AnalyticsScreen
+import com.example.smartblind.analytics.SensorViewModel
+import kotlinx.coroutines.launch
 import com.example.smartblind.ble.BleViewModel
 import com.example.smartblind.ble.BluetoothScreen
 import com.example.smartblind.control.ControlActions
@@ -87,8 +99,16 @@ fun tiltAngleDegrees(x: Float, y: Float, z: Float): Float {
     return Math.toDegrees(acos(cos).toDouble()).toFloat()
 }
 
+/** Вкладки нижньої панелі навігації. */
+enum class AppScreen(val label: Int, val icon: ImageVector) {
+    HOME(R.string.nav_home, Icons.Filled.Home),
+    BLUETOOTH(R.string.nav_bluetooth, Icons.Filled.Share),
+    ANALYTICS(R.string.nav_analytics, Icons.Filled.DateRange)
+}
+
 class MainActivity : ComponentActivity(), SensorEventListener {
 
+    private val sensorViewModel: SensorViewModel by viewModels()
     private val bleViewModel: BleViewModel by viewModels()
     private val cloudViewModel: CloudSyncViewModel by viewModels()
     private val controlViewModel: ControlViewModel by viewModels()
@@ -116,10 +136,15 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         // Датчик світла необов'язковий: якщо його немає, lux лишається null.
         lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
 
+        // Спрацювання актуатора (ЛР №4) фіксується в БД з actionTriggered = true.
+        lifecycleScope.launch {
+            controlViewModel.actuatorEvents.collect { sensorViewModel.onActuatorTriggered() }
+        }
+
         setContent {
             SmartBlindTheme {
-                // Проста навігація між екраном ЛР №1 та екраном Bluetooth.
-                var showBluetooth by rememberSaveable { mutableStateOf(false) }
+                // Навігація між вкладками: Головна (ЛР №1), Bluetooth (ЛР №2), Аналітика (ЛР №5).
+                var screen by rememberSaveable { mutableStateOf(AppScreen.HOME) }
                 val cloudState by cloudViewModel.state.collectAsState()
                 val controlState by controlViewModel.uiState.collectAsState()
                 val controlActions = remember {
@@ -133,15 +158,32 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 LaunchedEffect(Unit) {
                     cloudViewModel.messages.collect { snackbarHostState.showSnackbar(it) }
                 }
-                BackHandler(enabled = showBluetooth) { showBluetooth = false }
+                BackHandler(enabled = screen != AppScreen.HOME) { screen = AppScreen.HOME }
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
-                    snackbarHost = { SnackbarHost(snackbarHostState) }
+                    snackbarHost = { SnackbarHost(snackbarHostState) },
+                    bottomBar = {
+                        NavigationBar {
+                            AppScreen.entries.forEach { item ->
+                                NavigationBarItem(
+                                    selected = screen == item,
+                                    onClick = { screen = item },
+                                    icon = { Icon(item.icon, contentDescription = null) },
+                                    label = { Text(stringResource(item.label)) }
+                                )
+                            }
+                        }
+                    }
                 ) { innerPadding ->
-                    if (showBluetooth) {
+                    if (screen == AppScreen.BLUETOOTH) {
                         BluetoothScreen(
                             viewModel = bleViewModel,
-                            onBack = { showBluetooth = false },
+                            onBack = { screen = AppScreen.HOME },
+                            modifier = Modifier.padding(innerPadding)
+                        )
+                    } else if (screen == AppScreen.ANALYTICS) {
+                        AnalyticsScreen(
+                            viewModel = sensorViewModel,
                             modifier = Modifier.padding(innerPadding)
                         )
                     } else {
@@ -156,7 +198,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                             blindStatus = controlState.blindStatus,
                             controlState = controlState,
                             controlActions = controlActions,
-                            onOpenBluetooth = { showBluetooth = true },
+                            onOpenBluetooth = { screen = AppScreen.BLUETOOTH },
                             modifier = Modifier.padding(innerPadding)
                         )
                     }
@@ -208,6 +250,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         // Хмарна синхронізація: ViewModel сама вирішує, коли відправляти (5 с або Δ).
         if (hasAccelerometer) {
             cloudViewModel.onSensorData(SensorSample(x, y, z, lux))
+            // Локальна БД: запис за Δ або таймером (кут нахилу — основна величина).
+            sensorViewModel.onSensorValue(tiltAngle)
             // DecisionEngine: перехід стану → вібрація та ліхтарик.
             controlViewModel.onSensors(tiltAngle, lux)
         }
