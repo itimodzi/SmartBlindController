@@ -20,4 +20,13 @@
     <string name="found_devices">Знайдені пристрої</string>
     <string name="tap_to_connect">Натисніть, щоб підключити</string>
     <string name="terminal">Термінал</string>
+    <string name="cloud_sync_title">Хмарна синхронізація</string>
+    <string name="cloud_status_idle">Очікування даних</string>
+    <string name="cloud_status_synced">Synced</string>
+    <string name="cloud_status_pending">Pending</string>
+    <string name="cloud_status_error">Error</string>
+    <string name="cloud_last_sync">Остання синхронізація: %1$s</string>
+    <string name="cloud_pending_count">У черзі: %1$d</string>
+    <string name="cloud_no_internet">Немає інтернету — дані збережено, статус Pending</string>
+    <string name="light_lux">Освітленість: %1$.0f лк</string>
 </resources>

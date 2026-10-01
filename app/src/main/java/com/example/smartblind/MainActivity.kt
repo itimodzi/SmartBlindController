@@ -22,6 +22,17 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.saveable.rememberSaveable
 import com.example.smartblind.ble.BleViewModel
 import com.example.smartblind.ble.BluetoothScreen
+import com.example.smartblind.cloud.CloudSyncIndicator
+import com.example.smartblind.cloud.CloudSyncState
+import com.example.smartblind.cloud.CloudSyncViewModel
+import com.example.smartblind.cloud.SensorSample
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.remember
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -75,9 +86,11 @@ fun tiltAngleDegrees(x: Float, y: Float, z: Float): Float {
 class MainActivity : ComponentActivity(), SensorEventListener {
 
     private val bleViewModel: BleViewModel by viewModels()
+    private val cloudViewModel: CloudSyncViewModel by viewModels()
 
     private lateinit var sensorManager: SensorManager
     private var accelerometer: Sensor? = null
+    private var lightSensor: Sensor? = null
 
     // Стан UI: Compose автоматично перемальовує екран при зміні цих значень.
     private var x by mutableFloatStateOf(0f)
@@ -85,6 +98,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var z by mutableFloatStateOf(0f)
     private var tiltAngle by mutableFloatStateOf(0f)
     private var hasAccelerometer by mutableStateOf(true)
+    private var lux by mutableStateOf<Float?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -94,13 +108,23 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         // Якщо акселерометра немає, getDefaultSensor повертає null — покажемо повідомлення.
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         hasAccelerometer = accelerometer != null
+        // Датчик світла необов'язковий: якщо його немає, lux лишається null.
+        lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
 
         setContent {
             SmartBlindTheme {
                 // Проста навігація між екраном ЛР №1 та екраном Bluetooth.
                 var showBluetooth by rememberSaveable { mutableStateOf(false) }
+                val cloudState by cloudViewModel.state.collectAsState()
+                val snackbarHostState = remember { SnackbarHostState() }
+                LaunchedEffect(Unit) {
+                    cloudViewModel.messages.collect { snackbarHostState.showSnackbar(it) }
+                }
                 BackHandler(enabled = showBluetooth) { showBluetooth = false }
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                Scaffold(
+                    modifier = Modifier.fillMaxSize(),
+                    snackbarHost = { SnackbarHost(snackbarHostState) }
+                ) { innerPadding ->
                     if (showBluetooth) {
                         BluetoothScreen(
                             viewModel = bleViewModel,
@@ -114,6 +138,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                             y = y,
                             z = z,
                             tiltAngle = tiltAngle,
+                            lux = lux,
+                            cloudState = cloudState,
                             onOpenBluetooth = { showBluetooth = true },
                             modifier = Modifier.padding(innerPadding)
                         )
@@ -129,6 +155,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         accelerometer?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
         }
+        lightSensor?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
+        }
     }
 
     // Відписуємось, коли екран ховається, щоб не витрачати батарею.
@@ -139,11 +168,18 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     // Викликається при кожному новому вимірі акселерометра.
     override fun onSensorChanged(event: SensorEvent) {
-        if (event.sensor.type != Sensor.TYPE_ACCELEROMETER) return
-        x = event.values[0]
-        y = event.values[1]
-        z = event.values[2]
-        tiltAngle = tiltAngleDegrees(x, y, z)
+        when (event.sensor.type) {
+            Sensor.TYPE_ACCELEROMETER -> {
+                x = event.values[0]
+                y = event.values[1]
+                z = event.values[2]
+                tiltAngle = tiltAngleDegrees(x, y, z)
+            }
+            Sensor.TYPE_LIGHT -> lux = event.values[0]
+            else -> return
+        }
+        // Хмарна синхронізація: ViewModel сама вирішує, коли відправляти (5 с або Δ).
+        if (hasAccelerometer) cloudViewModel.onSensorData(SensorSample(x, y, z, lux))
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
@@ -157,11 +193,14 @@ fun BlindControllerScreen(
     z: Float,
     tiltAngle: Float,
     modifier: Modifier = Modifier,
+    lux: Float? = null,
+    cloudState: CloudSyncState? = null,
     onOpenBluetooth: (() -> Unit)? = null
 ) {
     Column(
         modifier = modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
@@ -178,6 +217,11 @@ fun BlindControllerScreen(
             Spacer(Modifier.height(24.dp))
         }
 
+        if (cloudState != null) {
+            CloudSyncIndicator(cloudState)
+            Spacer(Modifier.height(24.dp))
+        }
+
         if (!hasAccelerometer) {
             Text(
                 text = stringResource(R.string.no_accelerometer),
@@ -190,6 +234,9 @@ fun BlindControllerScreen(
         Text(stringResource(R.string.accel_x, x), style = MaterialTheme.typography.bodyLarge)
         Text(stringResource(R.string.accel_y, y), style = MaterialTheme.typography.bodyLarge)
         Text(stringResource(R.string.accel_z, z), style = MaterialTheme.typography.bodyLarge)
+        if (lux != null) {
+            Text(stringResource(R.string.light_lux, lux), style = MaterialTheme.typography.bodyLarge)
+        }
         Spacer(Modifier.height(24.dp))
 
         // Індикатор кута: прогрес = кут / 90°.
