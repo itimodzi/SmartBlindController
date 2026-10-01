@@ -1,0 +1,23 @@
+<resources>
+    <string name="app_name">Smart Blind Controller</string>
+    <string name="title">Smart Blind Controller</string>
+    <string name="accel_x">X: %1$.2f м/с²</string>
+    <string name="accel_y">Y: %1$.2f м/с²</string>
+    <string name="accel_z">Z: %1$.2f м/с²</string>
+    <string name="tilt_angle">Кут нахилу: %1$.1f°</string>
+    <string name="blind_status_label">Статус жалюзі</string>
+    <string name="status_open">Відкрито</string>
+    <string name="status_half">Наполовину</string>
+    <string name="status_closed">Закрито</string>
+    <string name="no_accelerometer">На цьому пристрої немає акселерометра. Керування жалюзі неможливе.</string>
+    <string name="open_bluetooth">Bluetooth</string>
+    <string name="bluetooth_title">Bluetooth</string>
+    <string name="back">← Назад</string>
+    <string name="connected">Connected</string>
+    <string name="disconnected">Disconnected</string>
+    <string name="disconnect">Відключити</string>
+    <string name="scan_devices">Пошук пристроїв</string>
+    <string name="found_devices">Знайдені пристрої</string>
+    <string name="tap_to_connect">Натисніть, щоб підключити</string>
+    <string name="terminal">Термінал</string>
+</resources>
