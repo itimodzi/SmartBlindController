@@ -22,6 +22,10 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.saveable.rememberSaveable
 import com.example.smartblind.ble.BleViewModel
 import com.example.smartblind.ble.BluetoothScreen
+import com.example.smartblind.control.ControlActions
+import com.example.smartblind.control.ControlUiState
+import com.example.smartblind.control.ControlViewModel
+import com.example.smartblind.control.ManualControlSection
 import com.example.smartblind.cloud.CloudSyncIndicator
 import com.example.smartblind.cloud.CloudSyncState
 import com.example.smartblind.cloud.CloudSyncViewModel
@@ -87,6 +91,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     private val bleViewModel: BleViewModel by viewModels()
     private val cloudViewModel: CloudSyncViewModel by viewModels()
+    private val controlViewModel: ControlViewModel by viewModels()
 
     private lateinit var sensorManager: SensorManager
     private var accelerometer: Sensor? = null
@@ -116,6 +121,14 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 // Проста навігація між екраном ЛР №1 та екраном Bluetooth.
                 var showBluetooth by rememberSaveable { mutableStateOf(false) }
                 val cloudState by cloudViewModel.state.collectAsState()
+                val controlState by controlViewModel.uiState.collectAsState()
+                val controlActions = remember {
+                    ControlActions(
+                        onBlind = controlViewModel::manualBlind,
+                        onVibration = controlViewModel::manualVibration,
+                        onTorch = controlViewModel::manualTorch
+                    )
+                }
                 val snackbarHostState = remember { SnackbarHostState() }
                 LaunchedEffect(Unit) {
                     cloudViewModel.messages.collect { snackbarHostState.showSnackbar(it) }
@@ -140,6 +153,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                             tiltAngle = tiltAngle,
                             lux = lux,
                             cloudState = cloudState,
+                            blindStatus = controlState.blindStatus,
+                            controlState = controlState,
+                            controlActions = controlActions,
                             onOpenBluetooth = { showBluetooth = true },
                             modifier = Modifier.padding(innerPadding)
                         )
@@ -147,6 +163,17 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 }
             }
         }
+    }
+
+    // Слухач Firebase живе лише поки екран видимий: підключаємо в onStart, відключаємо в onStop.
+    override fun onStart() {
+        super.onStart()
+        controlViewModel.startRemoteListening()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        controlViewModel.stopRemoteListening()
     }
 
     // Підписуємось на датчик, коли екран стає активним.
@@ -179,7 +206,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             else -> return
         }
         // Хмарна синхронізація: ViewModel сама вирішує, коли відправляти (5 с або Δ).
-        if (hasAccelerometer) cloudViewModel.onSensorData(SensorSample(x, y, z, lux))
+        if (hasAccelerometer) {
+            cloudViewModel.onSensorData(SensorSample(x, y, z, lux))
+            // DecisionEngine: перехід стану → вібрація та ліхтарик.
+            controlViewModel.onSensors(tiltAngle, lux)
+        }
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
@@ -195,6 +226,9 @@ fun BlindControllerScreen(
     modifier: Modifier = Modifier,
     lux: Float? = null,
     cloudState: CloudSyncState? = null,
+    blindStatus: BlindStatus? = null,
+    controlState: ControlUiState? = null,
+    controlActions: ControlActions? = null,
     onOpenBluetooth: (() -> Unit)? = null
 ) {
     Column(
@@ -219,6 +253,11 @@ fun BlindControllerScreen(
 
         if (cloudState != null) {
             CloudSyncIndicator(cloudState)
+            Spacer(Modifier.height(24.dp))
+        }
+
+        if (controlState != null && controlActions != null) {
+            ManualControlSection(controlState, controlActions)
             Spacer(Modifier.height(24.dp))
         }
 
@@ -251,7 +290,7 @@ fun BlindControllerScreen(
         Spacer(Modifier.height(32.dp))
 
         // Статус жалюзі за порогами кута.
-        val status = blindStatusFor(tiltAngle)
+        val status = blindStatus ?: blindStatusFor(tiltAngle)
         val (label, color) = when (status) {
             BlindStatus.OPEN -> R.string.status_open to Color(0xFF2E7D32)
             BlindStatus.HALF -> R.string.status_half to Color(0xFFEF6C00)

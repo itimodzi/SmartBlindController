@@ -29,4 +29,15 @@
     <string name="cloud_pending_count">У черзі: %1$d</string>
     <string name="cloud_no_internet">Немає інтернету — дані збережено, статус Pending</string>
     <string name="light_lux">Освітленість: %1$.0f лк</string>
+    <string name="manual_control_title">Manual Control</string>
+    <string name="torch_state">Torch: %1$s</string>
+    <string name="vibration_state">Vibration: %1$s</string>
+    <string name="vibration_active">активна</string>
+    <string name="vibration_inactive">неактивна</string>
+    <string name="last_command">Остання команда: %1$s (%2$s)</string>
+    <string name="last_command_none">Остання команда: —</string>
+    <string name="vibration_on">Вібрація ON</string>
+    <string name="vibration_off">Вібрація OFF</string>
+    <string name="torch_on">Ліхтарик ON</string>
+    <string name="torch_off">Ліхтарик OFF</string>
 </resources>
